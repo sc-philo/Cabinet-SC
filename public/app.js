@@ -28,7 +28,7 @@ document.getElementById('booking-form').addEventListener('submit', function(e) {
         return res.json();
     })
     .then(session => {
-        return Stripe("pk_test_51RHaSBCsDKqeKVJfLGX3pYREpuwMBH3JIGMDWpmfhU0BGSeigwAqEDSq9TtlDMjeZZoJSAw3ahQUoGZPALUUYGfX00n8QV4eTw")
+        return Stripe("pk_live_51RHaSBCsDKqeKVJfv2mA8R62HyusAzPmAPi0ZOCEEfnOPjqzdyYGOWwbIGTxcq34UZ7Na0xoElsTKOCbOYs1Vxfo00vWC58ztY)
             .redirectToCheckout({ sessionId: session.id });
     })
     .catch(err => {
