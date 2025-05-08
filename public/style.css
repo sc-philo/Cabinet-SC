@@ -1,0 +1,433 @@
+/* === STYLES PRINCIPAUX POUR SARAH COHEN === */
+
+@import url('https://fonts.googleapis.com/css2?family=Georgia&display=swap');
+
+:root {
+  --beige: #f6f2ea;
+  --noir: #1a1a1a;
+  --accent: #a23b4f;
+  --accent-dark: #802a3a;
+  --or: #d8bfa0;
+  --fond-sec: #f8f5ef;
+  --bordure: #ded6cc;
+  --texture: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+  --texture-contact: url('https://www.transparenttextures.com/patterns/exclusive-paper.png');
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Georgia', serif;
+  background-color: var(--beige);
+  color: var(--noir);
+  background-image: var(--texture);
+  background-repeat: repeat;
+  scroll-behavior: smooth;
+}
+
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(246, 242, 234, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 10vw;
+  z-index: 1000;
+  border-bottom: 1px solid var(--bordure);
+  gap: 50px;
+  transition: background 0.3s ease;
+}
+
+header > div {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+nav {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+header a {
+  text-decoration: none;
+  color: var(--noir);
+  font-size: 17px;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+header a:hover {
+  color: var(--accent);
+}
+
+section {
+
+  padding: 120px 12vw 100px 12vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+#a-propos {
+  padding-top: 30px;
+}
+
+
+@media (max-width: 768px) {
+  section {
+    padding: 100px 6vw 80px 6vw;
+  }
+  header {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+
+h1 {
+  font-weight: 400;
+  font-size: 42px;
+  color: var(--noir);
+  letter-spacing: 1px;
+}
+
+h2 {
+  font-weight: 400;
+  font-size: 28px;
+  color: var(--noir);
+  margin-bottom: 20px;
+}
+
+.btn {
+  background: linear-gradient(to bottom, #a6947e, #93856f);
+  color: white;
+  border: none;
+  padding: 14px 30px;
+  font-size: 17px;
+  cursor: pointer;
+  margin-top: 20px;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+
+.btn:hover {
+  background: linear-gradient(to bottom, #93856f, #7c6b58);
+}
+
+.btn.gold {
+  background-color: var(--or);
+  color: #3a2f24;
+}
+
+.liseret {
+  width: 2px;
+  height: 100%;
+  background-color: #5c1f29;
+  position: fixed;
+  left: 50px;
+  top: 0;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+footer {
+  padding: 40px 10vw;
+  font-size: 14px;
+  background: #f3f0e8;
+  border-top: 1px solid var(--bordure);
+}
+
+#intro {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--noir);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  animation: fadeOut 3s forwards 2s;
+}
+
+.logo-sc {
+  color: #f3eee4;
+  font-size: 62px;
+  font-style: italic;
+  letter-spacing: 8px;
+  font-weight: 500;
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; visibility: hidden; }
+}
+
+hr.separator, section + section::before {
+  content: '';
+  display: block;
+  width: 80px;
+  height: 2px;
+  background-color: #a97c7c;
+  margin: 60px auto;
+  opacity: 0.25;
+  border: none;
+}
+
+#contact {
+  background-color: #fdfaf5;
+  background-image: var(--texture-contact);
+  background-repeat: repeat;
+  padding: 100px 10vw 80px 10vw;
+  border-radius: 8px;
+}
+
+.contact-block {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: var(--fond-sec);
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  max-width: 600px;
+}
+
+.contact-block p {
+  margin: 10px 0;
+}
+
+#booking-widget {
+  max-width: 400px;
+  margin: 2rem auto;
+  font-family: Georgia, serif;
+  background: #fdfaf5;
+  border: 2px solid var(--or);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  
+  background-image: url('https://www.transparenttextures.com/patterns/light-grey-floral-motif.png');
+  background-repeat: repeat;
+  background-blend-mode: normal;
+
+  /* Petit plus pour un effet plus doux */
+  
+  opacity: 0.98; /* optionnel → très léger voile pour que ce ne soit pas trop marqué */
+}
+
+
+#booking-widget h3 {
+  margin: 0 0 1rem;
+  color: var(--noir);
+  text-align: center;
+}
+
+#booking-widget label {
+  display: block;
+  margin: .8rem 0 .3rem;
+  font-weight: bold;
+}
+
+#booking-widget select,
+#booking-widget input {
+  width: 100%;
+  padding: .6rem;
+  border: 1px solid var(--bordure);
+  border-radius: 4px;
+  margin-bottom: .8rem;
+}
+
+#booking-widget button {
+  width: 100%;
+  padding: .8rem;
+  background: var(--or);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #3a2f24;
+  font-size: 1rem;
+}
+
+#booking-widget button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+
+.portrait-centered {
+  width: 400px; /* même largeur que le widget */
+  height: 400px; /* même hauteur que le widget pour un alignement parfait */
+  margin: 60px auto 30px auto; /* exactement comme le widget */
+  background-color: #fdfaf5; /* même fond que le widget */
+  border: 2px solid #ded6cc; /* même bordure que le widget */
+  border-radius: 8px; /* cohérence de style */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* même ombre */
+  
+  display: flex;
+  justify-content: center;
+  align-items: center; /* centre l’image verticalement et horizontalement */
+}
+
+/* === PORTRAIT === */
+
+.portrait-centered {
+  width: 400px; /* même largeur que le widget pour la cohérence */
+  height: 400px; /* même hauteur que le widget */
+  margin: 60px auto 30px auto; /* centré et espacements harmonieux */
+  background-color: #fdfaf5; /* fond doux et cohérent */
+  border: 2px solid #ded6cc; /* bordure subtile */
+  border-radius: 8px; /* arrondi doux */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* légère ombre pour donner du relief */
+  
+  display: flex;
+  justify-content: center;
+  align-items: center; /* centre parfaitement l’image */
+}
+
+
+/* === PORTRAIT - VERSION FINALE PURE ET FIXE === */
+
+.portrait-centered {
+  width: auto;
+  margin: 40px auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.portrait-centered img {
+  width: 250px;
+  height: auto;
+  object-fit: cover;
+  border-radius: 4px;
+
+  /* Cadre noble et discret */
+  border: 4px solid #5c1f29;
+  background-color: #f6f2ea;
+  padding: 6px;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  opacity: 1; /* totalement visible en permanence */
+} 
+
+
+#main-content {
+  padding-top: 100px; /* respiration noble avant #accueil */
+}
+
+#accueil {
+  padding: 60px 12vw 30px 12vw; /* ample mais fluide dessous */
+}
+
+#accueil + #a-propos::before {
+  margin: 5px auto; /* très léger écart seulement entre portrait et À propos */
+}
+
+#a-propos {
+  padding: 30px 12vw 30px 12vw; /* dense */
+}
+#rendezvous {
+  padding: 30px 12vw 0px 12vw; /* Plus du tout d’espace bas */
+}
+#contact {
+  padding: 0px 12vw 30px 12vw; /* Juste l’espace pour respirer en bas */
+}
+
+@media (max-width: 768px) {
+
+  #main-content {
+    padding-top: 80px; /* légèrement réduit par rapport à desktop pour éviter trop de scroll */
+  }
+
+  #accueil {
+    padding: 140px 6vw 20px 6vw; /* ample en haut, très fluide en bas */
+  }
+
+  #accueil + #a-propos::before {
+    margin: 5px auto; /* conserve la légère séparation sans créer de trou */
+  }
+
+  #a-propos,
+  #éthique {
+    padding: 20px 6vw 20px 6vw; /* très resserré */
+  }
+
+  #services,
+  #rendezvous {
+    padding: 20px 6vw 10px 6vw; /* encore plus compact entre les deux */
+  }
+
+  #contact {
+    padding: 0px 6vw 20px 6vw; /* encore plus serré au début pour coller à "prendre rendez-vous" */
+  }
+
+  #rendezvous + #contact::before {
+    display: none; /* supprime complètement la séparation pour un flux parfait */
+  }
+
+  section + section::before {
+    margin: 15px auto; /* plus petit pour tout le site sur mobile */
+  }
+
+  .portrait-centered {
+    margin: 20px auto;
+  }
+
+  footer {
+    margin-top: -10px;
+    padding: 30px 6vw;
+  }
+}
+#secret-heptagram {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  margin: 60px auto 0 auto; /* espace avant Accueil */
+  opacity: 0.2; /* discret par défaut */
+  transition: opacity 0.3s ease;
+}
+
+
+
+#secret-heptagram img {
+  width: 40px;
+  height: auto;
+  cursor: pointer;
+}
+
+
+.socials {
+  position: fixed;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  z-index: 999;
+}
+
+.socials a img, .socials svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.5;
+  transition: opacity 0.3s, transform 0.3s;
+  filter: grayscale(100%);
+}
+
+.socials a img:hover, .socials a svg:hover {
+  opacity: 1;
+  transform: scale(1.1);
+  filter: grayscale(0%);
+}
+
