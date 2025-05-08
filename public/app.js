@@ -1,4 +1,3 @@
-
 flatpickr("#datetime", { enableTime: true, dateFormat: "d/m/Y H:i", locale: "fr", minDate: "today", time_24hr: true });
 
 const serviceType = document.getElementById('service-type');
@@ -28,8 +27,7 @@ document.getElementById('booking-form').addEventListener('submit', function(e) {
         return res.json();
     })
     .then(session => {
-        return Stripe("pk_live_51RHaSBCsDKqeKVJfv2mA8R62HyusAzPmAPi0ZOCEEfnOPjqzdyYGOWwbIGTxcq34UZ7Na0xoElsTKOCbOYs1Vxfo00vWC58ztY)
-            .redirectToCheckout({ sessionId: session.id });
+        return Stripe("pk_live_51RHaSBCsDKqeKVJfv2mA8R62HyusAzPmAPi0ZOCEEfnOPjqzdyYGOWwbIGTxcq34UZ7Na0xoElsTKOCbOYs1Vxfo00vWC58ztY").redirectToCheckout({ sessionId: session.id });
     })
     .catch(err => {
         console.error("Erreur lors de la création de la session Stripe :", err);
