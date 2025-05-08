@@ -1,7 +1,8 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const stripe = require('stripe')('sk_test_51RHaSBCsDKqeKVJfLGX3pYREpuwMBH3JIGMDWpmfhU0BGSeigwAqEDSq9TtlDMjeZZoJSAw3ahQUoGZPALUUYGfX00n8QV4eTw');
+require('dotenv').config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const emailjs = require('@emailjs/nodejs');
 const app = express();
 const endpointSecret = 'whsec_VOTRE_SIGNATURE_ICI';
