@@ -14,7 +14,7 @@ function parseDateTime(dateTimeStr) {
   // Convertit "14/05/2025 12:00" → Date JS
   const [datePart, timePart] = dateTimeStr.split(' ');
   const [day, month, year] = datePart.split('/');
-  return new Date(\`\${year}-\${month}-\${day}T\${timePart}:00\`);
+  return new Date(`${year}-${month}-${day}T${timePart}:00`);
 }
 
 function isSlotTaken(dateTime) {
