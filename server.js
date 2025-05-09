@@ -21,23 +21,23 @@ function isSunday(dateTimeStr) {
   return date.getDay() === 0;
 }
 
-function isTooLate(dateTimeStr, mode) {
+function isTooLate(dateTimeStr, serviceType) {
   const now = new Date();
   const chosen = new Date(dateTimeStr);
   const diffMs = chosen - now;
   const diffH = diffMs / (1000 * 60 * 60);
-  if (mode === 'cabinet') return diffH < 24;
-  if (mode === 'visio' || mode === 'telephone') return diffH < 2;
+  if (serviceType === 'cabinet') return diffH < 24;
+  if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2;
   return false;
 }
 
 app.post('/create-checkout-session', async (req, res) => {
-  const { dateTime, mode } = req.body;
+  const { dateTime, serviceType } = req.body;
   console.log("🟡 Données reçues :", req.body);
 
-  if (!dateTime || !mode) {
-    console.log("❌ Champs manquants :", { dateTime, mode });
-    return res.status(400).json({ error: 'Champs manquants', received: { dateTime, mode } });
+  if (!dateTime || !serviceType) {
+    console.log("❌ Champs manquants :", { dateTime, serviceType });
+    return res.status(400).json({ error: 'Champs manquants', received: { dateTime, serviceType } });
   }
 
   if (isSlotTaken(dateTime)) {
@@ -45,13 +45,13 @@ app.post('/create-checkout-session', async (req, res) => {
     return res.status(400).json({ error: 'Ce créneau est déjà réservé.' });
   }
 
-  if (mode === 'cabinet' && isSunday(dateTime)) {
+  if (serviceType === 'cabinet' && isSunday(dateTime)) {
     console.log("❌ Tentative de réservation un dimanche au cabinet :", dateTime);
     return res.status(400).json({ error: 'Pas de rendez-vous au cabinet le dimanche.' });
   }
 
-  if (isTooLate(dateTime, mode)) {
-    console.log("❌ Créneau trop proche :", { dateTime, mode });
+  if (isTooLate(dateTime, serviceType)) {
+    console.log("❌ Créneau trop proche :", { dateTime, serviceType });
     return res.status(400).json({ error: 'Ce créneau est trop proche. Merci de réserver à l’avance.' });
   }
 
@@ -61,7 +61,7 @@ app.post('/create-checkout-session', async (req, res) => {
       line_items: [{
         price_data: {
           currency: 'eur',
-          product_data: { name: `Consultation - ${mode}` },
+          product_data: { name: `Consultation - ${serviceType}` },
           unit_amount: 8000,
         },
         quantity: 1,
@@ -71,7 +71,7 @@ app.post('/create-checkout-session', async (req, res) => {
       cancel_url: `${req.headers.origin}/cancel.html`,
       metadata: {
         dateTime,
-        mode
+        serviceType
       }
     });
 
