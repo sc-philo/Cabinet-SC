@@ -18,7 +18,7 @@ function isSlotTaken(dateTime) {
 
 function isSunday(dateTimeStr) {
   const date = new Date(dateTimeStr);
-  return date.getDay() === 0; // Sunday is 0
+  return date.getDay() === 0;
 }
 
 function isTooLate(dateTimeStr, mode) {
@@ -33,20 +33,25 @@ function isTooLate(dateTimeStr, mode) {
 
 app.post('/create-checkout-session', async (req, res) => {
   const { dateTime, mode } = req.body;
+  console.log("🟡 Données reçues :", req.body);
 
   if (!dateTime || !mode) {
-    return res.status(400).json({ error: 'Informations manquantes.' });
+    console.log("❌ Champs manquants :", { dateTime, mode });
+    return res.status(400).json({ error: 'Champs manquants', received: { dateTime, mode } });
   }
 
   if (isSlotTaken(dateTime)) {
+    console.log("❌ Créneau déjà pris :", dateTime);
     return res.status(400).json({ error: 'Ce créneau est déjà réservé.' });
   }
 
   if (mode === 'cabinet' && isSunday(dateTime)) {
+    console.log("❌ Tentative de réservation un dimanche au cabinet :", dateTime);
     return res.status(400).json({ error: 'Pas de rendez-vous au cabinet le dimanche.' });
   }
 
   if (isTooLate(dateTime, mode)) {
+    console.log("❌ Créneau trop proche :", { dateTime, mode });
     return res.status(400).json({ error: 'Ce créneau est trop proche. Merci de réserver à l’avance.' });
   }
 
