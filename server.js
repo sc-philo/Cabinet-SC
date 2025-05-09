@@ -56,7 +56,7 @@ app.post('/create-checkout-session', async (req, res) => {
       line_items: [{
         price_data: {
           currency: 'eur',
-          product_data: { name: `Consultation ${mode}` },
+          product_data: { name: `Consultation - ${mode}` },
           unit_amount: 8000,
         },
         quantity: 1,
@@ -79,4 +79,3 @@ app.post('/create-checkout-session', async (req, res) => {
 
 const port = process.env.PORT || 4242;
 app.listen(port, () => console.log(`Server running on port ${port}`));
-
