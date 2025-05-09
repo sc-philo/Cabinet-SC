@@ -1,52 +1,82 @@
 
 const express = require('express');
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const cors = require('cors');
-const path = require('path');
+const fs = require('fs');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const app = express();
-
-// Autoriser CORS pour toutes les origines et méthodes GET, POST
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-}));
-
+app.use(cors());
+app.use(express.static('public'));
 app.use(express.json());
 
-// Servir les fichiers statiques (index.html, etc.) depuis le dossier public
-app.use(express.static(path.join(__dirname, 'public')));
+const reservationsFile = './reservations.json';
 
-// Route POST pour créer une session Stripe
+function isSlotTaken(dateTime) {
+  if (!fs.existsSync(reservationsFile)) return false;
+  const reservations = JSON.parse(fs.readFileSync(reservationsFile));
+  return reservations.some(r => r.dateTime === dateTime);
+}
+
+function isSunday(dateTimeStr) {
+  const date = new Date(dateTimeStr);
+  return date.getDay() === 0; // Sunday is 0
+}
+
+function isTooLate(dateTimeStr, mode) {
+  const now = new Date();
+  const chosen = new Date(dateTimeStr);
+  const diffMs = chosen - now;
+  const diffH = diffMs / (1000 * 60 * 60);
+  if (mode === 'cabinet') return diffH < 24;
+  if (mode === 'visio' || mode === 'telephone') return diffH < 2;
+  return false;
+}
+
 app.post('/create-checkout-session', async (req, res) => {
-    try {
-        const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [{
-                price_data: {
-                    currency: 'eur',
-                    product_data: {
-                        name: `Consultation - ${req.body.serviceType}`
-                    },
-                    unit_amount: 8000
-                },
-                quantity: 1
-            }],
-            mode: 'payment',
-            success_url: 'https://sarah-cohen-cabinet-vrsu.onrender.com/success.html',
-            cancel_url: 'https://sarah-cohen-cabinet-vrsu.onrender.com/cancel.html',
-            metadata: {
-                serviceType: req.body.serviceType,
-                dateTime: req.body.dateTime
-            }
-        });
+  const { dateTime, mode } = req.body;
 
-        res.json({ id: session.id });
-    } catch (error) {
-        console.error("Error creating checkout session:", error);
-        res.status(500).send("Erreur lors de la création de la session de paiement.");
-    }
+  if (!dateTime || !mode) {
+    return res.status(400).json({ error: 'Informations manquantes.' });
+  }
+
+  if (isSlotTaken(dateTime)) {
+    return res.status(400).json({ error: 'Ce créneau est déjà réservé.' });
+  }
+
+  if (mode === 'cabinet' && isSunday(dateTime)) {
+    return res.status(400).json({ error: 'Pas de rendez-vous au cabinet le dimanche.' });
+  }
+
+  if (isTooLate(dateTime, mode)) {
+    return res.status(400).json({ error: 'Ce créneau est trop proche. Merci de réserver à l’avance.' });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'eur',
+          product_data: { name: `Consultation ${mode}` },
+          unit_amount: 8000,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${req.headers.origin}/success.html`,
+      cancel_url: `${req.headers.origin}/cancel.html`,
+      metadata: {
+        dateTime,
+        mode
+      }
+    });
+
+    res.json({ id: session.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur de création de session.' });
+  }
 });
 
-// Définir le port, utile pour Render
-const PORT = process.env.PORT || 4242;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const port = process.env.PORT || 4242;
+app.listen(port, () => console.log(`Server running on port ${port}`));
+

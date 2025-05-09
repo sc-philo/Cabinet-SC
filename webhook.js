@@ -1,31 +1,39 @@
 
 const express = require('express');
-const bodyParser = require('body-parser');
-require('dotenv').config();
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const emailjs = require('@emailjs/nodejs');
+const fs = require('fs');
 const app = express();
-const endpointSecret = 'whsec_VOTRE_SIGNATURE_ICI';
+app.use(express.json());
 
-app.use(bodyParser.raw({ type: 'application/json' }));
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const reservationsFile = './reservations.json';
 
-app.post('/webhook', (req, res) => {
-    const sig = req.headers['stripe-signature'];
-    let event;
+app.post('/webhook', express.raw({ type: 'application/json' }), (request, response) => {
+  const sig = request.headers['stripe-signature'];
 
-    try {
-        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    } catch (err) {
-        return res.status(400).send(`Webhook Error: ${err.message}`);
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(request.body, sig, endpointSecret);
+  } catch (err) {
+    console.log(`⚠️  Webhook signature verification failed.`, err.message);
+    return response.sendStatus(400);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const newRes = { dateTime: session.metadata.dateTime, mode: session.metadata.mode };
+
+    let reservations = [];
+    if (fs.existsSync(reservationsFile)) {
+      reservations = JSON.parse(fs.readFileSync(reservationsFile));
     }
 
-    if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        emailjs.init("SC.cabinet-philosophe");
-        emailjs.send("default_service", "SC.cabinet-philosophe", { service_type: session.metadata.serviceType, date_time: session.metadata.dateTime });
-    }
+    reservations.push(newRes);
+    fs.writeFileSync(reservationsFile, JSON.stringify(reservations, null, 2));
+    console.log("✅ Réservation enregistrée :", newRes);
+  }
 
-    res.json({ received: true });
+  response.status(200).end();
 });
 
-app.listen(4243, () => console.log("Webhook listening on 4243"));
+module.exports = app;
