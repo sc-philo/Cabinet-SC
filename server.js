@@ -1,12 +1,17 @@
 
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const calendarRoute = require('./routes/calendar');
+
 const app = express();
 app.use(cors());
 app.use(express.static('public'));
 app.use(express.json());
+app.use('/', calendarRoute);
+
 
 const reservationsFile = './reservations.json';
 
@@ -94,4 +99,23 @@ app.post('/create-checkout-session', async (req, res) => {
 });
 
 const port = process.env.PORT || 4242;
+const ical = require('ical-generator');
+
+app.get('/calendar.ics', (req, res) => {
+    const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
+
+    // Exemple d’événement (à remplacer plus tard par tes vrais RDV)
+    cal.createEvent({
+        start: new Date(2025, 7, 13, 22, 0), // 13 août 2025 à 22h
+        end: new Date(2025, 7, 13, 23, 0),   // Fin à 23h
+        summary: 'Séance de peinture',
+        description: 'Peinture dans l’atelier',
+        location: 'Cabinet Sarah Cohen',
+        url: 'https://cabinet-sarah-cohen.onrender.com'
+    });
+
+    res.setHeader('Content-Type', 'text/calendar');
+    res.send(cal.toString());
+});
+
 app.listen(port, () => console.log(`Server running on port ${port}`));
