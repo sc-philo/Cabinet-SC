@@ -1,16 +1,14 @@
-// --- core deps ---
+// --- Dépendances coeur ---
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 
-// --- stripe (clé via variable d'environnement STRIPE_SECRET_KEY) ---
+// --- Stripe (clé dans STRIPE_SECRET_KEY) ---
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// --- (optionnel) autres routes si tu en as déjà ---
-const calendarRoute = require('./routes/calendar'); // ok si tu veux garder ce fichier
+// --- iCal (compat CommonJS / ESM) ---
 const icalLib = require('ical-generator');
-const ical = icalLib.default || icalLib;
-
+const ical = icalLib.default || icalLib; // ← important avec certaines versions
 
 const app = express();
 
@@ -19,10 +17,7 @@ app.use(cors());
 app.use(express.static('public'));
 app.use(express.json());
 
-// Monte les routes additionnelles si besoin
-app.use('/', calendarRoute); // sans conflit avec /calendar.ics ci-dessous
-
-// ------------------- Réservations utilitaires -------------------
+// ------------------- Utilitaires réservations -------------------
 const reservationsFile = './reservations.json';
 
 function parseDateTime(dateTimeStr) {
@@ -56,6 +51,9 @@ function isTooLate(parsedDate, serviceType) {
   if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2;
   return false;
 }
+
+// ------------------- Route santé (utile pour Render) -------------------
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 
 // ------------------- Route Stripe -------------------
 app.post('/create-checkout-session', async (req, res) => {
@@ -113,16 +111,14 @@ app.post('/create-checkout-session', async (req, res) => {
 });
 
 // ------------------- Route iCal (flux pour Google/iCloud) -------------------
-app.get('/calendar.ics', (req, res) => {
+app.get('/calendar.ics', (_req, res) => {
   try {
     const cal = ical({
       name: 'Calendrier Cabinet Sarah Cohen',
-      // on peut remettre explicitement la TZ si besoin:
-      // timezone: 'Europe/Paris',
+      // timezone: 'Europe/Paris', // tu peux décommenter si tu veux
     });
 
-    // ✅ Événement de test (en UTC pour éviter tout bug de TZ).
-    // 22:00 Paris (été, UTC+2) = 20:00Z
+    // ✅ Événement de test : 22:00 Paris (été, UTC+2) = 20:00Z
     cal.createEvent({
       start: new Date(Date.UTC(2025, 7, 13, 20, 0)), // 2025-08-13 20:00:00Z
       end:   new Date(Date.UTC(2025, 7, 13, 21, 0)),
@@ -130,7 +126,6 @@ app.get('/calendar.ics', (req, res) => {
       description: 'Peinture dans l’atelier',
       location: 'Cabinet Sarah Cohen',
       url: 'https://cabinet-sarah-cohen.onrender.com',
-      // uid facultatif (généré si absent)
     });
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -143,7 +138,7 @@ app.get('/calendar.ics', (req, res) => {
 });
 
 // ------------------- Lancement du serveur (Render) -------------------
-const PORT = process.env.PORT || 4242;
+const PORT = process.env.PORT || 10000; // Render détecte le port automatiquement
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
