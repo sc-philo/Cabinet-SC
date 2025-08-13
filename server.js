@@ -8,7 +8,9 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // --- (optionnel) autres routes si tu en as déjà ---
 const calendarRoute = require('./routes/calendar'); // ok si tu veux garder ce fichier
-const ical = require('ical-generator');
+const icalLib = require('ical-generator');
+const ical = icalLib.default || icalLib;
+
 
 const app = express();
 
