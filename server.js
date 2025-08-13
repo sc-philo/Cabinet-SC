@@ -8,6 +8,9 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const icalLib = require('ical-generator');
 const ical = icalLib.default || icalLib;
 
+// Email (SMTP)
+const nodemailer = require('nodemailer');
+
 const app = express();
 
 // ------------------- Fichiers & utilitaires -------------------
@@ -69,7 +72,7 @@ app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 app.post(
   '/webhook',
   express.raw({ type: 'application/json' }),
-  (req, res) => {
+  async (req, res) => {
     const sig = req.headers['stripe-signature'];
     let event;
 
@@ -88,8 +91,15 @@ app.post(
       const session = event.data.object;
       const { dateTime, serviceType } = session.metadata || {};
       if (dateTime && serviceType) {
-        addReservation({ dateTime, serviceType });
-        console.log(`✅ Réservation ajoutée via Webhook: ${dateTime} - ${serviceType}`);
+        try {
+          addReservation({ dateTime, serviceType });
+          console.log(`✅ Réservation ajoutée via Webhook: ${dateTime} - ${serviceType}`);
+
+          // Notification email
+          await notifyNewBooking({ dateTime, serviceType });
+        } catch (e) {
+          console.error('❌ Post-traitement webhook:', e);
+        }
       } else {
         console.warn('⚠️ Metadata manquante dans la session Stripe.');
       }
@@ -103,6 +113,33 @@ app.post(
 app.use(cors());
 app.use(express.static('public'));
 app.use(express.json());
+
+// ------------------- Transport e-mail -------------------
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 465),
+  secure: String(process.env.SMTP_PORT || 465) === '465', // true si 465
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Helper notification (mail HTML simple)
+async function notifyNewBooking({ dateTime, serviceType }) {
+  const html = `
+    <h2>🗓️ Nouveau rendez-vous confirmé</h2>
+    <p><b>Date/heure :</b> ${dateTime}</p>
+    <p><b>Type :</b> ${serviceType}</p>
+    <p>Ajouté à <code>reservations.json</code> et visible dans <a href="https://cabinet-sarah-cohen.onrender.com/calendar.ics">le flux iCal</a>.</p>
+  `;
+  await mailer.sendMail({
+    from: process.env.NOTIFY_FROM,
+    to: process.env.NOTIFY_TO,
+    subject: `✅ Nouveau RDV — ${serviceType} — ${dateTime}`,
+    html,
+  });
+}
 
 // ------------------- Stripe Checkout -------------------
 app.post('/create-checkout-session', async (req, res) => {
@@ -154,8 +191,8 @@ app.post('/create-checkout-session', async (req, res) => {
   }
 });
 
-// ------------------- Route DEBUG pour tester sans Stripe -------------------
-app.post('/debug/add', (req, res) => {
+// ------------------- Route DEBUG : ajouter une résa sans Stripe -------------------
+app.post('/debug/add', async (req, res) => {
   const { dateTime, serviceType } = req.body;
   if (!dateTime || !serviceType) return res.status(400).json({ error: 'dateTime et serviceType requis' });
 
@@ -163,6 +200,13 @@ app.post('/debug/add', (req, res) => {
   if (isNaN(d)) return res.status(400).json({ error: 'Format de date invalide (JJ/MM/AAAA HH:mm).' });
 
   addReservation({ dateTime, serviceType });
+
+  try {
+    await notifyNewBooking({ dateTime, serviceType }); // email immédiat
+  } catch (e) {
+    console.error('❌ Envoi email (debug/add):', e);
+  }
+
   res.json({ ok: true, count: loadReservations().length });
 });
 
@@ -191,10 +235,10 @@ app.get('/calendar.ics', (_req, res) => {
       });
     });
 
-    // (Optionnel) — garde un évènement de test s’il n’y a encore aucune réservation
+    // Événement de test si aucune résa
     if (reservations.length === 0) {
       cal.createEvent({
-        start: new Date(Date.UTC(2025, 7, 13, 20, 0)), // 20:00Z = 22:00 Paris été
+        start: new Date(Date.UTC(2025, 7, 13, 20, 0)), // 22:00 Paris été
         end:   new Date(Date.UTC(2025, 7, 13, 21, 0)),
         summary: 'Séance de peinture (test)',
         description: 'Évènement de démonstration',
