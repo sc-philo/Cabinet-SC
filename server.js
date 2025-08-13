@@ -1,20 +1,21 @@
-
-
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const calendarRoute = require('./routes/calendar');
+const ical = require('ical-generator');
 
 const app = express();
+
+// Middlewares
 app.use(cors());
 app.use(express.static('public'));
 app.use(express.json());
 app.use('/', calendarRoute);
 
-
 const reservationsFile = './reservations.json';
 
+// ------------------- Fonctions utilitaires -------------------
 function parseDateTime(dateTimeStr) {
   // Convertit "14/05/2025 12:00" → Date JS
   const [datePart, timePart] = dateTimeStr.split(' ');
@@ -41,6 +42,7 @@ function isTooLate(parsedDate, serviceType) {
   return false;
 }
 
+// ------------------- Route Stripe -------------------
 app.post('/create-checkout-session', async (req, res) => {
   const { dateTime, serviceType } = req.body;
   console.log("🟡 Données reçues :", req.body);
@@ -78,7 +80,7 @@ app.post('/create-checkout-session', async (req, res) => {
         price_data: {
           currency: 'eur',
           product_data: { name: `Consultation - ${serviceType}` },
-          unit_amount: 8000,
+          unit_amount: 8000, // Prix en centimes
         },
         quantity: 1,
       }],
@@ -98,24 +100,30 @@ app.post('/create-checkout-session', async (req, res) => {
   }
 });
 
-const port = process.env.PORT || 4242;
-const ical = require('ical-generator');
-
+// ------------------- Route iCal -------------------
 app.get('/calendar.ics', (req, res) => {
-    const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
+  const cal = ical({
+    name: 'Calendrier Cabinet Sarah Cohen',
+    timezone: 'Europe/Paris',
+  });
 
-    // Exemple d’événement (à remplacer plus tard par tes vrais RDV)
-    cal.createEvent({
-        start: new Date(2025, 7, 13, 22, 0), // 13 août 2025 à 22h
-        end: new Date(2025, 7, 13, 23, 0),   // Fin à 23h
-        summary: 'Séance de peinture',
-        description: 'Peinture dans l’atelier',
-        location: 'Cabinet Sarah Cohen',
-        url: 'https://cabinet-sarah-cohen.onrender.com'
-    });
+  // Exemple d’événement (à remplacer plus tard par tes vrais RDV)
+  cal.createEvent({
+    start: new Date('2025-08-13T22:00:00+02:00'), // Heure Paris
+    end:   new Date('2025-08-13T23:00:00+02:00'),
+    summary: 'Séance de peinture',
+    description: 'Peinture dans l’atelier',
+    location: 'Cabinet Sarah Cohen',
+    url: 'https://cabinet-sarah-cohen.onrender.com',
+  });
 
-    res.setHeader('Content-Type', 'text/calendar');
-    res.send(cal.toString());
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
+  res.send(cal.toString());
 });
 
-app.listen(port, () => console.log(`Server running on port ${port}`));
+// ------------------- Lancement du serveur -------------------
+const PORT = process.env.PORT || 4242;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
