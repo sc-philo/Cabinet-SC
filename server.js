@@ -1,220 +1,250 @@
-// --- Dépendances ---
+// --- Imports & init ---------------------------------------------------------
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const bodyParser = require('body-parser');
+const ical = require('ical-generator');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// iCal (compat ESM/CommonJS)
-const icalLib = require('ical-generator');
-const ical = icalLib.default || icalLib;
-
-// Email (SMTP) — optionnel si variables présentes
-const nodemailer = require('nodemailer');
+// Si tu as ce fichier : routes/calendar.js
+let calendarRoute = null;
+try {
+  calendarRoute = require('./routes/calendar');
+} catch (e) {
+  // pas grave s’il n’existe pas
+}
 
 const app = express();
+app.use(cors());
 
-// ------------------- Fichiers & utilitaires -------------------
-const RES_FILE = './reservations.json';
+// ---------------------------------------------------------------------------
+// 1) WEBHOOK STRIPE (raw body, AVANT express.json())
+// ---------------------------------------------------------------------------
+app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-function loadReservations() {
+  let event;
   try {
-    if (!fs.existsSync(RES_FILE)) return [];
-    return JSON.parse(fs.readFileSync(RES_FILE, 'utf-8'));
-  } catch (e) {
-    console.error('❌ Lecture reservations.json:', e);
-    return [];
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.error('⚠️  Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
-}
-function saveReservations(resList) {
-  try { fs.writeFileSync(RES_FILE, JSON.stringify(resList, null, 2)); }
-  catch (e) { console.error('❌ Écriture reservations.json:', e); }
-}
-function addReservation(entry) {
-  const list = loadReservations();
-  list.push(entry);
-  saveReservations(list);
+
+  // Traiter les événements utiles
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      console.log('💰 Paiement confirmé :', session.id);
+
+      // Si tu passes des métadonnées à la création de la session, récupère-les ici
+      const meta = session.metadata || {};
+      const dateTime = meta.dateTime || null;
+      const serviceType = meta.serviceType || null;
+
+      try {
+        const reservationsFile = './reservations.json';
+        const current = fs.existsSync(reservationsFile)
+          ? JSON.parse(fs.readFileSync(reservationsFile, 'utf8'))
+          : [];
+
+        current.push({
+          session_id: session.id,
+          dateTime,
+          serviceType,
+          createdAt: new Date().toISOString(),
+        });
+
+        fs.writeFileSync(reservationsFile, JSON.stringify(current, null, 2));
+        console.log('📝 Réservation enregistrée via webhook.');
+      } catch (e) {
+        console.error('Erreur écriture reservations.json (webhook):', e);
+      }
+      break;
+    }
+
+    default:
+      console.log('ℹ️  Événement Stripe non géré :', event.type);
+  }
+
+  // Réponse obligatoire pour que Stripe arrête de retenter
+  res.sendStatus(200);
+});
+
+// ---------------------------------------------------------------------------
+// 2) Le reste de l’app (JSON, statiques, utilitaires)
+// ---------------------------------------------------------------------------
+app.use(express.json());                // APRÈS le webhook
+app.use(express.static('public'));      // tes fichiers publics (index.html, etc.)
+if (calendarRoute) app.use('/', calendarRoute);
+
+// ---------------------- Utils réservation & règles -------------------------
+const RESA_FILE = './reservations.json';
+
+// "14/05/2025 12:00" → Date
+function parseFRDateTime(dateTimeStr) {
+  if (!dateTimeStr) return null;
+  // accepte "DD/MM/YYYY HH:mm" ou "YYYY-MM-DDTHH:mm"
+  if (dateTimeStr.includes('/')) {
+    const [datePart, timePart] = dateTimeStr.trim().split(/[ T]/);
+    const [d, m, y] = datePart.split('/').map(Number);
+    const [hh, mm] = (timePart || '00:00').split(':').map(Number);
+    return new Date(y, m - 1, d, hh, mm);
+  }
+  // ISO-ish
+  const d = new Date(dateTimeStr);
+  return isNaN(d) ? null : d;
 }
 
-// Parse "JJ/MM/AAAA HH:mm" -> Date
-function parseDateTimeFR(dateTimeStr) {
-  const [datePart, timePart] = String(dateTimeStr || '').trim().split(' ');
-  if (!datePart || !timePart) return new Date('invalid');
-  const [day, month, year] = datePart.split('/');
-  return new Date(`${year}-${month}-${day}T${timePart}:00`);
+function isSunday(d) {
+  return d.getDay() === 0; // 0 = dimanche
 }
 
-// Anti-doublon : même minute exacte
-function isExactSlotTaken(dateTimeFR) {
-  return loadReservations().some(r => r.dateTime === dateTimeFR);
-}
-
-function isSunday(d) { return d.getDay() === 0; }
 function isTooLate(d, serviceType) {
   const now = new Date();
-  const diffH = (d - now) / 36e5;
-  if (serviceType === 'cabinet') return diffH < 24;
-  if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2;
+  const diffH = (d - now) / 36e5; // ms → heures
+
+  if (serviceType === 'cabinet') return diffH < 24;        // ≥ 24h
+  if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2; // ≥ 2h
   return false;
 }
 
-// ------------------- Healthcheck -------------------
-app.get('/healthz', (_req, res) => res.status(200).send('ok'));
-
-// ------------------- ⚠️ Webhook Stripe (RAW body) -------------------
-// IMPORTANT : doit être défini AVANT express.json()
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook error:', err.message);
-    return res.status(400).send(`Webhook error: ${err.message}`);
+function outOfDailyWindow(d, serviceType) {
+  // contraintes horaires seulement pour visio/téléphone (7h–23h30)
+  if (serviceType === 'visio' || serviceType === 'telephone') {
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const afterStart = h > 7 || (h === 7 && m >= 0);
+    const beforeEnd = h < 23 || (h === 23 && m <= 30);
+    return !(afterStart && beforeEnd);
   }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const { dateTime, serviceType } = session.metadata || {};
-    if (dateTime && serviceType) {
-      if (isExactSlotTaken(dateTime)) {
-        console.warn(`⚠️ Créneau déjà pris (webhook ignoré) : ${dateTime}`);
-      } else {
-        try {
-          addReservation({ dateTime, serviceType });
-          console.log(`✅ Réservation ajoutée via Webhook: ${dateTime} - ${serviceType}`);
-          await notifyNewBooking({ dateTime, serviceType }); // email si configuré
-        } catch (e) {
-          console.error('❌ Post-traitement webhook:', e);
-        }
-      }
-    } else {
-      console.warn('⚠️ Metadata manquante dans la session Stripe.');
-    }
-  }
-  res.json({ received: true });
-});
-
-// ------------------- Middlewares (après le webhook) -------------------
-app.use(cors());
-app.use(express.static('public'));
-app.use(express.json());
-
-// ------------------- Transport e-mail (si variables présentes) -------------------
-const nodemailerReady = !!(process.env.SMTP_HOST && process.env.NOTIFY_FROM && process.env.NOTIFY_TO);
-const mailer = nodemailerReady ? nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 465),
-  secure: String(process.env.SMTP_PORT || 465) === '465',
-  auth: (process.env.SMTP_USER && process.env.SMTP_PASS) ? {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  } : undefined,
-}) : null;
-
-async function notifyNewBooking({ dateTime, serviceType }) {
-  if (!nodemailerReady) return;
-  const html = `
-    <h2>🗓️ Nouveau rendez-vous confirmé</h2>
-    <p><b>Date/heure :</b> ${dateTime}</p>
-    <p><b>Type :</b> ${serviceType}</p>
-    <p>Visible dans <a href="https://cabinet-sarah-cohen.onrender.com/calendar.ics">le flux iCal</a>.</p>
-  `;
-  await mailer.sendMail({
-    from: process.env.NOTIFY_FROM,
-    to: process.env.NOTIFY_TO,
-    subject: `✅ Nouveau RDV — ${serviceType} — ${dateTime}`,
-    html,
-  });
+  return false;
 }
 
-// ------------------- Stripe Checkout (anti-doublon AVANT paiement) -------------------
-app.post('/create-checkout-session', async (req, res) => {
-  const { dateTime, serviceType } = req.body;
-  console.log('🟡 Demande de session :', req.body);
-
-  if (!dateTime || !serviceType) return res.status(400).json({ error: 'Champs manquants' });
-
-  const parsed = parseDateTimeFR(dateTime);
-  if (isNaN(parsed)) return res.status(400).json({ error: 'Format de date invalide (JJ/MM/AAAA HH:mm).' });
-
-  // ✅ anti-doublon serveur
-  if (isExactSlotTaken(dateTime)) return res.status(400).json({ error: 'Ce créneau est déjà réservé.' });
-
-  if (serviceType === 'cabinet' && isSunday(parsed)) return res.status(400).json({ error: 'Pas de rendez-vous au cabinet le dimanche.' });
-  if (isTooLate(parsed, serviceType)) return res.status(400).json({ error: 'Ce créneau est trop proche. Merci de réserver à l’avance.' });
-
+function isSlotTaken(dateTime) {
+  if (!fs.existsSync(RESA_FILE)) return false;
   try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'eur',
-          product_data: { name: `Consultation - ${serviceType}` },
-          unit_amount: 8000, // €80.00
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: `${req.headers.origin}/success.html`,
-      cancel_url: `${req.headers.origin}/cancel.html`,
-      metadata: { dateTime, serviceType },
-    });
-
-    res.json({ id: session.id });
-  } catch (err) {
-    console.error('❌ Erreur Stripe :', err.message);
-    res.status(500).json({ error: 'Erreur Stripe : ' + err.message });
+    const reservations = JSON.parse(fs.readFileSync(RESA_FILE, 'utf8'));
+    return reservations.some((r) => r.dateTime === dateTime);
+  } catch {
+    return false;
   }
-});
+}
 
-// ------------------- Route DEBUG : ajouter une résa sans Stripe -------------------
-app.post('/debug/add', async (req, res) => {
-  const { dateTime, serviceType } = req.body;
-  if (!dateTime || !serviceType) return res.status(400).json({ error: 'dateTime et serviceType requis' });
-
-  const d = parseDateTimeFR(dateTime);
-  if (isNaN(d)) return res.status(400).json({ error: 'Format de date invalide (JJ/MM/AAAA HH:mm).' });
-
-  // anti-doublon
-  if (isExactSlotTaken(dateTime)) return res.status(400).json({ error: 'Ce créneau est déjà réservé.' });
-
-  addReservation({ dateTime, serviceType });
-  try { await notifyNewBooking({ dateTime, serviceType }); } catch (e) { console.error('❌ Envoi email (debug/add):', e); }
-
-  res.json({ ok: true, count: loadReservations().length });
-});
-
-// ------------------- Flux iCal (Google/iCloud) -------------------
-app.get('/calendar.ics', (_req, res) => {
+// ---------------------- Route checkout session -----------------------------
+app.post('/create-checkout-session', async (req, res) => {
   try {
-    const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
-    const reservations = loadReservations();
-    reservations.forEach(r => {
-      const start = parseDateTimeFR(r.dateTime);
-      const end = new Date(start.getTime() + 60 * 60 * 1000); // +1h
-      const location = r.serviceType === 'cabinet' ? 'Cabinet Sarah Cohen' : 'En ligne (Visio/Téléphone)';
-      cal.createEvent({ start, end, summary: `Consultation - ${r.serviceType}`, location, url: 'https://cabinet-sarah-cohen.onrender.com' });
-    });
-    if (reservations.length === 0) {
-      cal.createEvent({
-        start: new Date(Date.UTC(2025, 7, 13, 20, 0)),
-        end:   new Date(Date.UTC(2025, 7, 13, 21, 0)),
-        summary: 'Séance de peinture (test)',
-        description: 'Évènement de démonstration',
-        location: 'Cabinet Sarah Cohen',
+    const { dateTime, serviceType } = req.body;
+
+    if (!dateTime || !serviceType) {
+      return res.status(400).json({
+        error: "Champs manquants",
+        message:
+          "Merci d’indiquer un type de séance et un créneau date/heure.",
       });
     }
-    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
-    res.send(cal.toString());
+
+    const parsed = parseFRDateTime(dateTime);
+    if (!parsed || isNaN(parsed)) {
+      return res.status(400).json({
+        error: "Format de date invalide",
+        message:
+          "Format attendu : JJ/MM/AAAA HH:MM (ex. 15/08/2025 14:30).",
+      });
+    }
+
+    if (serviceType === 'cabinet' && isSunday(parsed)) {
+      return res.status(400).json({
+        error: "Dimanche non disponible",
+        message:
+          "Les rendez-vous au cabinet ne sont pas disponibles le dimanche.",
+      });
+    }
+
+    if (isTooLate(parsed, serviceType)) {
+      return res.status(400).json({
+        error: "Créneau trop proche",
+        message:
+          serviceType === 'cabinet'
+            ? "Les rendez-vous au cabinet doivent être pris au moins 24h à l’avance."
+            : "Les rendez-vous en visio/téléphone doivent être pris au moins 2h à l’avance.",
+      });
+    }
+
+    if (outOfDailyWindow(parsed, serviceType)) {
+      return res.status(400).json({
+        error: "Hors horaires",
+        message:
+          "Visio / téléphone : réservation possible entre 07:00 et 23:30.",
+      });
+    }
+
+    if (isSlotTaken(dateTime)) {
+      return res.status(400).json({
+        error: "Créneau indisponible",
+        message: "Ce créneau est déjà réservé. Merci de choisir une autre heure.",
+      });
+    }
+
+    // Montant par défaut (ajuste si besoin)
+    const amount = 8000; // 80,00 €
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            unit_amount: amount,
+            product_data: {
+              name: `Consultation — ${serviceType}`,
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${req.headers.origin}/success.html`,
+      cancel_url: `${req.headers.origin}/cancel.html`,
+      metadata: {
+        dateTime,
+        serviceType,
+      },
+    });
+
+    return res.json({ id: session.id });
   } catch (err) {
-    console.error('❌ ICS generation error:', err && err.stack ? err.stack : err);
-    res.status(500).send('ICS generation failed: ' + (err && err.message ? err.message : String(err)));
+    console.error('❌ Erreur Stripe /create-checkout-session :', err);
+    return res.status(500).json({
+      error: "StripeError",
+      message:
+        "Impossible de créer la session de paiement pour le moment. Merci de réessayer dans quelques minutes.",
+    });
   }
 });
 
-// ------------------- Lancement serveur (Render) -------------------
-const PORT = process.env.PORT || 10000;
+// ---------------------- Flux iCal minimal (exemple) ------------------------
+app.get('/calendar.ics', (req, res) => {
+  const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
+
+  // Exemple d’événement de test (remplace par tes données réelles si besoin)
+  cal.createEvent({
+    start: new Date(2025, 7, 13, 22, 0),
+    end: new Date(2025, 7, 13, 23, 0),
+    summary: 'Séance de peinture',
+    description: 'Peinture dans l’atelier',
+    location: 'Cabinet Sarah Cohen',
+    url: 'https://cabinet-sarah-cohen.onrender.com',
+  });
+
+  res.setHeader('Content-Type', 'text/calendar');
+  res.send(cal.toString());
+});
+
+// ---------------------- Démarrage ------------------------------------------
+const PORT = process.env.PORT || 10000; // Render lie le port automatiquement
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
