@@ -15,11 +15,11 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
   } catch (err) {
-    console.error('⚠️ Signature invalide :', err.message);
+    console.error('⚠️  Signature invalide :', err.message);
     return res.sendStatus(400);
   }
 
-  // Traitement de l’événement Stripe
+  // Traitement de l'événement
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const newRes = { dateTime: session.metadata.dateTime, mode: session.metadata.mode };
@@ -37,7 +37,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   res.status(200).end();
 });
 
-// Réactiver le parsing JSON pour les routes suivantes
+// Activation du parsing JSON pour les autres routes
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
