@@ -1,7 +1,7 @@
 const express = require('express');
-const ical    = require('ical-generator');
-const fs      = require('fs');
-const path    = require('path');
+const ical = require('ical-generator').default; // or: const { default: ical } = require('ical-generator');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 const RESA_FILE = path.join(__dirname, '..', 'reservations.json');
@@ -31,7 +31,7 @@ router.get('/calendar.ics', (req, res) => {
   reservations.forEach(r => {
     const start = parseFRDateTime(r.dateTime);
     if (!start) return;
-    const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 h
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 h
     cal.createEvent({
       start,
       end,
@@ -47,7 +47,7 @@ router.get('/calendar.ics', (req, res) => {
     'Content-Disposition',
     'attachment; filename="calendar.ics"'
   );
-  cal.serve(res);
+  res.send(cal.toString());
 });
 
 module.exports = router;
