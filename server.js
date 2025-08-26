@@ -1,10 +1,8 @@
 // --- Imports & init ---------------------------------------------------------
-const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const ical = require('ical-generator');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Si tu as ce fichier : routes/calendar.js
@@ -33,15 +31,13 @@ app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) =>
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Traiter les événements utiles
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
       console.log('💰 Paiement confirmé :', session.id);
 
-      // Si tu passes des métadonnées à la création de la session, récupère-les ici
       const meta = session.metadata || {};
-      const dateTime = meta.dateTime || null;
+      const dateTime    = meta.dateTime    || null;
       const serviceType = meta.serviceType || null;
 
       try {
@@ -64,12 +60,10 @@ app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) =>
       }
       break;
     }
-
     default:
       console.log('ℹ️  Événement Stripe non géré :', event.type);
   }
 
-  // Réponse obligatoire pour que Stripe arrête de retenter
   res.sendStatus(200);
 });
 
@@ -83,41 +77,37 @@ if (calendarRoute) app.use('/', calendarRoute);
 // ---------------------- Utils réservation & règles -------------------------
 const RESA_FILE = './reservations.json';
 
-// "14/05/2025 12:00" → Date
 function parseFRDateTime(dateTimeStr) {
   if (!dateTimeStr) return null;
-  // accepte "DD/MM/YYYY HH:mm" ou "YYYY-MM-DDTHH:mm"
   if (dateTimeStr.includes('/')) {
     const [datePart, timePart] = dateTimeStr.trim().split(/[ T]/);
     const [d, m, y] = datePart.split('/').map(Number);
     const [hh, mm] = (timePart || '00:00').split(':').map(Number);
     return new Date(y, m - 1, d, hh, mm);
   }
-  // ISO-ish
   const d = new Date(dateTimeStr);
   return isNaN(d) ? null : d;
 }
 
 function isSunday(d) {
-  return d.getDay() === 0; // 0 = dimanche
+  return d.getDay() === 0;
 }
 
 function isTooLate(d, serviceType) {
   const now = new Date();
-  const diffH = (d - now) / 36e5; // ms → heures
+  const diffH = (d - now) / 36e5;
 
-  if (serviceType === 'cabinet') return diffH < 24;        // ≥ 24h
-  if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2; // ≥ 2h
+  if (serviceType === 'cabinet') return diffH < 24;
+  if (serviceType === 'visio' || serviceType === 'telephone') return diffH < 2;
   return false;
 }
 
 function outOfDailyWindow(d, serviceType) {
-  // contraintes horaires seulement pour visio/téléphone (7h–23h30)
   if (serviceType === 'visio' || serviceType === 'telephone') {
     const h = d.getHours();
     const m = d.getMinutes();
     const afterStart = h > 7 || (h === 7 && m >= 0);
-    const beforeEnd = h < 23 || (h === 23 && m <= 30);
+    const beforeEnd  = h < 23 || (h === 23 && m <= 30);
     return !(afterStart && beforeEnd);
   }
   return false;
@@ -127,7 +117,7 @@ function isSlotTaken(dateTime) {
   if (!fs.existsSync(RESA_FILE)) return false;
   try {
     const reservations = JSON.parse(fs.readFileSync(RESA_FILE, 'utf8'));
-    return reservations.some((r) => r.dateTime === dateTime);
+    return reservations.some(r => r.dateTime === dateTime);
   } catch {
     return false;
   }
@@ -188,7 +178,6 @@ app.post('/create-checkout-session', async (req, res) => {
       });
     }
 
-    // Montant par défaut (ajuste si besoin)
     const amount = 8000; // 80,00 €
 
     const session = await stripe.checkout.sessions.create({
@@ -208,10 +197,7 @@ app.post('/create-checkout-session', async (req, res) => {
       ],
       success_url: `${req.headers.origin}/success.html`,
       cancel_url: `${req.headers.origin}/cancel.html`,
-      metadata: {
-        dateTime,
-        serviceType,
-      },
+      metadata: { dateTime, serviceType },
     });
 
     return res.json({ id: session.id });
@@ -223,24 +209,6 @@ app.post('/create-checkout-session', async (req, res) => {
         "Impossible de créer la session de paiement pour le moment. Merci de réessayer dans quelques minutes.",
     });
   }
-});
-
-// ---------------------- Flux iCal minimal (exemple) ------------------------
-app.get('/calendar.ics', (req, res) => {
-  const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
-
-  // Exemple d’événement de test (remplace par tes données réelles si besoin)
-  cal.createEvent({
-    start: new Date(2025, 7, 13, 22, 0),
-    end: new Date(2025, 7, 13, 23, 0),
-    summary: 'Séance de peinture',
-    description: 'Peinture dans l’atelier',
-    location: 'Cabinet Sarah Cohen',
-    url: 'https://cabinet-sarah-cohen.onrender.com',
-  });
-
-  res.setHeader('Content-Type', 'text/calendar');
-  res.send(cal.toString());
 });
 
 // ---------------------- Démarrage ------------------------------------------

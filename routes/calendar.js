@@ -1,33 +1,53 @@
 const express = require('express');
+const ical    = require('ical-generator');
+const fs      = require('fs');
+const path    = require('path');
+
 const router = express.Router();
-const ical = require('ical-generator');
+const RESA_FILE = path.join(__dirname, '..', 'reservations.json');
 
-// Route pour générer et servir le flux iCal
+// Convertit "15/08/2025 14:30" (ou ISO) en objet Date
+function parseFRDateTime(str) {
+  if (!str) return null;
+  if (str.includes('/')) {
+    const [d, m, y, h = '00', min = '00'] =
+      str.replace(' ', '/').replace(':', '/').split('/').map(Number);
+    return new Date(y, m - 1, d, h, min);
+  }
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+
 router.get('/calendar.ics', (req, res) => {
-    const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
+  const cal = ical({ name: 'Calendrier Cabinet Sarah Cohen' });
 
-    // Exemple d’événements — à remplacer plus tard par les vrais événements de ton site
+  let reservations = [];
+  try {
+    reservations = JSON.parse(fs.readFileSync(RESA_FILE, 'utf8'));
+  } catch (err) {
+    console.error('Impossible de lire reservations.json :', err);
+  }
+
+  reservations.forEach(r => {
+    const start = parseFRDateTime(r.dateTime);
+    if (!start) return;
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 h
     cal.createEvent({
-        start: new Date(2025, 7, 15, 10, 0), // 15 août 2025, 10h00
-        end: new Date(2025, 7, 15, 11, 0),
-        summary: 'Consultation Client',
-        description: 'Consultation psychologique avec Sarah Cohen',
-        location: 'Cabinet Sarah Cohen',
-        url: 'https://cabinet-sarah-cohen.onrender.com'
+      start,
+      end,
+      summary: `Consultation — ${r.serviceType}`,
+      description: `Séance ${r.serviceType}`,
+      location: 'Cabinet Sarah Cohen',
+      url: 'https://cabinet-sarah-cohen.onrender.com',
     });
+  });
 
-    cal.createEvent({
-        start: new Date(2025, 7, 16, 14, 0),
-        end: new Date(2025, 7, 16, 15, 0),
-        summary: 'Séance de Peinture',
-        description: 'Atelier artistique avec Sarah',
-        location: 'Atelier Cabinet Sarah Cohen'
-    });
-
-    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
-    cal.serve(res);
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    'attachment; filename="calendar.ics"'
+  );
+  cal.serve(res);
 });
 
 module.exports = router;
-
